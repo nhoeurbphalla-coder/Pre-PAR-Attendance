@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Check In / ចុះឈ្មោះចូលរួម</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="location-data.js"></script>
+<script src="shared.js"></script>
+<style>
+  :root{
+    --wv-blue:#005C97; --wv-blue-dark:#003B63; --wv-blue-light:#E7F2FA;
+    --wv-gold:#F2A93B; --ink:#1C2733; --ink-soft:#5A6B7A; --line:#DDE6ED;
+    --bg:#F5F8FA; --good:#2E9E4C; --bad:#D0393B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font-family:'Inter','Noto Sans Khmer',sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  .kh{font-family:'Noto Sans Khmer',sans-serif;}
+  header{
+    background:linear-gradient(120deg,var(--wv-blue-dark),var(--wv-blue));
+    color:#fff; padding:22px 20px 26px; text-align:center;
+  }
+  header .mark{
+    width:44px;height:44px;border-radius:12px;background:var(--wv-gold);
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--wv-blue-dark);
+    font-size:15px; margin:0 auto 10px;
+  }
+  header h1{font-size:17px; margin:0 0 4px; font-weight:700;}
+  header p{margin:0; font-size:13px; opacity:.9;}
+  main{max-width:460px; margin:-14px auto 0; padding:0 16px 60px;}
+  .card{
+    background:#fff; border-radius:16px; padding:22px 18px; box-shadow:0 8px 24px rgba(0,60,100,.08);
+    margin-bottom:16px;
+  }
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:14px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--ink-soft);}
+  input,select{
+    padding:12px 13px; border:1.5px solid var(--line); border-radius:10px; font-size:15px;
+    font-family:inherit; width:100%; background:#fff; color:var(--ink);
+  }
+  input:focus,select:focus{outline:none; border-color:var(--wv-blue);}
+  button.btn{
+    width:100%; padding:14px; border:none; border-radius:10px; font-size:15px; font-weight:700;
+    cursor:pointer; background:var(--wv-blue); color:#fff;
+  }
+  button.btn:disabled{opacity:.45; cursor:not-allowed;}
+  button.btn.gold{background:var(--wv-gold); color:var(--wv-blue-dark);}
+  .phone-row{display:flex; gap:8px;}
+  .phone-row input{flex:1;}
+  .phone-row button{width:auto; padding:12px 16px; white-space:nowrap;}
+  .title-choice{display:flex; gap:10px; margin-bottom:16px;}
+  .title-choice label{
+    flex:1; border:1.5px solid var(--line); border-radius:10px; padding:12px; text-align:center;
+    font-weight:700; font-size:13.5px; cursor:pointer; color:var(--ink-soft);
+  }
+  .title-choice input{display:none;}
+  .title-choice input:checked + span{color:var(--wv-blue);}
+  .title-choice label.checked{border-color:var(--wv-blue); background:var(--wv-blue-light); color:var(--wv-blue);}
+  .msg{
+    text-align:center; padding:14px; border-radius:10px; font-size:13.5px; margin-bottom:14px;
+  }
+  .msg.error{background:#FCEAEA; color:var(--bad);}
+  .msg.ok{background:#EAF6EE; color:var(--good);}
+  .hidden{display:none !important;}
+  .success-card{text-align:center; padding:36px 20px;}
+  .success-card .num{
+    font-size:52px; font-weight:800; color:var(--wv-blue); margin:8px 0;
+  }
+  .success-card .name{font-size:17px; font-weight:700; margin-bottom:4px;}
+  .success-card .ok-icon{
+    width:56px; height:56px; border-radius:50%; background:var(--good); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 14px;
+  }
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 12px;}
+  .section-label{font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; margin:18px 0 8px;}
+  .spinner{
+    width:22px;height:22px;border:3px solid var(--wv-blue-light); border-top-color:var(--wv-blue);
+    border-radius:50%; animation:spin .7s linear infinite; margin:0 auto;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">WV</div>
+  <h1 id="eventTitle">Loading event…</h1>
+  <p id="eventSub"></p>
+</header>
+
+<main>
+
+  <div id="loadErrorCard" class="card hidden">
+    <div class="msg error">This event link looks invalid or the event no longer exists. Please ask your staff for a new QR code.</div>
+  </div>
+
+  <div id="checkinCard" class="card hidden">
+    <div class="field">
+      <label>Phone number / លេខទូរស័ព្ទ</label>
+      <div class="phone-row">
+        <input id="phoneInput" type="tel" inputmode="numeric" placeholder="e.g. 012345678" autofocus>
+        <button class="btn" id="lookupBtn" style="width:auto;">Find</button>
+      </div>
+    </div>
+    <div id="lookupMsg"></div>
+
+    <form id="detailsForm" class="hidden">
+      <div class="title-choice" id="titleChoice">
+        <label id="lblParticipant"><input type="radio" name="title" value="Participant"><span>Participant</span></label>
+        <label id="lblFacilitator"><input type="radio" name="title" value="Facilitator"><span>Facilitator</span></label>
+      </div>
+
+      <div class="field"><label>Name / ឈ្មោះ</label><input id="f_name" class="kh"></div>
+      <div class="grid2">
+        <div class="field"><label>Sex</label>
+          <select id="f_sex"><option value=""></option><option value="Female">Female</option><option value="Male">Male</option></select>
+        </div>
+        <div class="field"><label>Age</label><input id="f_age" type="number" min="0"></div>
+      </div>
+      <div class="field"><label>Role / តួនាទី</label><input id="f_role" class="kh"></div>
+      <div class="field"><label>Commune / ឃុំ</label>
+        <select id="f_commune_select" class="kh"></select>
+        <input id="f_commune_other" class="kh hidden" placeholder="Type commune name">
+      </div>
+      <div class="field"><label>Village / ភូមិ</label>
+        <select id="f_village_select" class="kh"></select>
+        <input id="f_village_other" class="kh hidden" placeholder="Type village name">
+      </div>
+
+      <div class="section-label">Additional details</div>
+      <div class="grid2">
+        <div class="field"><label>RC</label><select id="f_rc"><option></option><option>Yes</option><option>No</option></select></div>
+        <div class="field"><label>Disabled</label><select id="f_disabled"><option></option><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>MVC</label><select id="f_mvc"><option></option><option>Yes</option><option>No</option></select></div>
+        <div class="field"><label>Wing</label><input id="f_wing"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Wing ID</label><input id="f_wingId"></div>
+        <div class="field"><label>Wing name</label><input id="f_wingName" class="kh"></div>
+      </div>
+      <div class="field">
+        <label>Do you have your own Wing account?</label>
+        <select id="f_hasWing">
+          <option value="Yes">Yes</option>
+          <option value="No">No — someone else will receive on my behalf</option>
+        </select>
+      </div>
+      <div id="authFields" class="hidden">
+        <div class="field"><label>Authorized person's name</label><input id="f_authName" class="kh"></div>
+        <div class="field"><label>Authorized person's Wing ID / phone</label><input id="f_authWing"></div>
+      </div>
+      <div class="field"><label>Other</label><input id="f_other" class="kh"></div>
+      <div class="field"><label>Remark</label><input id="f_remark" class="kh"></div>
+
+      <button type="submit" class="btn gold" id="submitBtn">Confirm attendance</button>
+    </form>
+  </div>
+
+  <div id="successCard" class="card success-card hidden">
+    <div class="ok-icon">✓</div>
+    <div class="name kh" id="successName"></div>
+    <div style="color:var(--ink-soft); font-size:13px;">Your participant number</div>
+    <div class="num" id="successNumber">—</div>
+    <button class="btn" id="checkinAnotherBtn" style="margin-top:6px;">Check in another person</button>
+  </div>
+
+</main>
+
+<script>
+const db = initFirebase();
+const params = new URLSearchParams(location.search);
+const eventId = params.get("event");
+let eventData = null;
+let foundPartner = null;
+let foundPhone = null;
+
+async function loadEvent(){
+  if (!eventId){ showLoadError(); return; }
+  try{
+    const doc = await db.collection("events").doc(eventId).get();
+    if (!doc.exists){ showLoadError(); return; }
+    eventData = doc.data();
+    document.getElementById("eventTitle").textContent = eventData.activity;
+    document.getElementById("eventSub").textContent = eventData.date + (eventData.staffName ? " · " + eventData.staffName : "");
+    document.getElementById("checkinCard").classList.remove("hidden");
+  }catch(e){
+    showLoadError();
+  }
+}
+function showLoadError(){
+  document.getElementById("eventTitle").textContent = "Event not found";
+  document.getElementById("loadErrorCard").classList.remove("hidden");
+}
+loadEvent();
+
+/* ---------- Title choice styling ---------- */
+document.querySelectorAll('.title-choice input').forEach(inp => {
+  inp.addEventListener("change", () => {
+    document.querySelectorAll('.title-choice label').forEach(l => l.classList.remove("checked"));
+    inp.closest("label").classList.add("checked");
+  });
+});
+
+/* ---------- Commune / village dropdowns ---------- */
+const communeSelect = document.getElementById("f_commune_select");
+const communeOther = document.getElementById("f_commune_other");
+const villageSelect = document.getElementById("f_village_select");
+const villageOther = document.getElementById("f_village_other");
+
+function populateCommunes(){
+  communeSelect.innerHTML = `<option value="">— Select —</option>`;
+  COMMUNES.forEach(c => {
+    const o = document.createElement("option"); o.value = c; o.textContent = c;
+    communeSelect.appendChild(o);
+  });
+  const o = document.createElement("option"); o.value = "__other__"; o.textContent = "Other / មិនមានក្នុងបញ្ជី";
+  communeSelect.appendChild(o);
+}
+function populateVillages(communeName){
+  villageSelect.innerHTML = `<option value="">— Select —</option>`;
+  (VILLAGES_BY_COMMUNE[communeName] || []).forEach(v => {
+    const o = document.createElement("option"); o.value = v; o.textContent = v;
+    villageSelect.appendChild(o);
+  });
+  const o = document.createElement("option"); o.value = "__other__"; o.textContent = "Other / មិនមានក្នុងបញ្ជី";
+  villageSelect.appendChild(o);
+}
+populateCommunes();
+communeSelect.addEventListener("change", () => {
+  const isOther = communeSelect.value === "__other__";
+  communeOther.classList.toggle("hidden", !isOther);
+  populateVillages(communeSelect.value);
+  villageOther.classList.add("hidden");
+});
+villageSelect.addEventListener("change", () => {
+  villageOther.classList.toggle("hidden", villageSelect.value === "__other__");
+});
+
+// Set commune/village selects from a stored value, falling back to "Other" if not in the list
+function setLocationFields(communeVal, villageVal){
+  const communeMatch = COMMUNES.includes(communeVal);
+  communeSelect.value = communeMatch ? communeVal : (communeVal ? "__other__" : "");
+  communeOther.classList.toggle("hidden", communeMatch || !communeVal);
+  communeOther.value = communeMatch ? "" : (communeVal || "");
+
+  populateVillages(communeMatch ? communeVal : "");
+  const villageList = communeMatch ? (VILLAGES_BY_COMMUNE[communeVal] || []) : [];
+  const villageMatch = villageList.includes(villageVal);
+  villageSelect.value = villageMatch ? villageVal : (villageVal ? "__other__" : "");
+  villageOther.classList.toggle("hidden", villageMatch || !villageVal);
+  villageOther.value = villageMatch ? "" : (villageVal || "");
+}
+function getCommuneValue(){ return communeSelect.value === "__other__" ? communeOther.value.trim() : communeSelect.value; }
+function getVillageValue(){ return villageSelect.value === "__other__" ? villageOther.value.trim() : villageSelect.value; }
+
+/* ---------- Wing ownership toggle ---------- */
+const hasWingSelect = document.getElementById("f_hasWing");
+const authFields = document.getElementById("authFields");
+function syncAuthFields(){
+  authFields.classList.toggle("hidden", hasWingSelect.value !== "No");
+}
+hasWingSelect.addEventListener("change", syncAuthFields);
+
+/* ---------- Phone lookup ---------- */
+document.getElementById("lookupBtn").addEventListener("click", doLookup);
+document.getElementById("phoneInput").addEventListener("keydown", (e)=>{ if (e.key==="Enter"){ e.preventDefault(); doLookup(); } });
+
+async function doLookup(){
+  const raw = document.getElementById("phoneInput").value;
+  const phone = normalizePhone(raw);
+  const msgEl = document.getElementById("lookupMsg");
+  msgEl.innerHTML = "";
+  if (!phone){ msgEl.innerHTML = `<div class="msg error">Please enter a phone number.</div>`; return; }
+
+  document.getElementById("lookupBtn").disabled = true;
+  document.getElementById("lookupBtn").textContent = "…";
+
+  // Already checked in for this event?
+  const existing = await db.collection("events").doc(eventId).collection("attendance").doc(phone).get();
+  if (existing.exists){
+    const d = existing.data();
+    showSuccess(d.name, d.no);
+    document.getElementById("lookupBtn").disabled = false;
+    document.getElementById("lookupBtn").textContent = "Find";
+    return;
+  }
+
+  const partnerDoc = await db.collection("partners").doc(phone).get();
+  document.getElementById("lookupBtn").disabled = false;
+  document.getElementById("lookupBtn").textContent = "Find";
+  foundPhone = phone;
+
+  if (!partnerDoc.exists){
+    // New partner — let them self-register right here.
+    foundPartner = null;
+    msgEl.innerHTML = `<div class="msg ok">You're new — please fill in your details below. This registers you for future activities too.</div>`;
+    fillForm(blankPartner());
+    document.getElementById("detailsForm").classList.remove("hidden");
+    return;
+  }
+  foundPartner = partnerDoc.data();
+  msgEl.innerHTML = `<div class="msg ok">Found: ${foundPartner.name}. Please check the details below and confirm.</div>`;
+  fillForm(foundPartner);
+  document.getElementById("detailsForm").classList.remove("hidden");
+}
+
+function fillForm(p){
+  document.getElementById("f_name").value = p.name||"";
+  document.getElementById("f_sex").value = normalizeSex(p.sex||"");
+  document.getElementById("f_age").value = p.age||"";
+  document.getElementById("f_role").value = p.role||"";
+  setLocationFields(p.commune||"", p.village||"");
+  document.getElementById("f_rc").value = p.rc||"";
+  document.getElementById("f_disabled").value = p.disabled||"";
+  document.getElementById("f_mvc").value = p.mvc||"";
+  document.getElementById("f_wing").value = p.wing||"";
+  document.getElementById("f_wingId").value = p.wingId||"";
+  document.getElementById("f_wingName").value = p.wingName||"";
+  document.getElementById("f_hasWing").value = p.hasWing || "Yes";
+  document.getElementById("f_authName").value = p.authName||"";
+  document.getElementById("f_authWing").value = p.authWing||"";
+  syncAuthFields();
+  document.getElementById("f_other").value = p.other||"";
+  document.getElementById("f_remark").value = p.remark||"";
+  document.querySelectorAll('.title-choice input').forEach(i=>{ i.checked=false; i.closest("label").classList.remove("checked"); });
+}
+
+/* ---------- Submit check-in ---------- */
+document.getElementById("detailsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const titleInput = document.querySelector('.title-choice input:checked');
+  if (!titleInput){ toast("Please choose Participant or Facilitator", "error"); return; }
+  if (!document.getElementById("f_name").value.trim()){ toast("Name is required", "error"); return; }
+
+  const submitBtn = document.getElementById("submitBtn");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Submitting…";
+
+  const record = {
+    name: document.getElementById("f_name").value.trim(),
+    sex: document.getElementById("f_sex").value,
+    age: document.getElementById("f_age").value,
+    role: document.getElementById("f_role").value.trim(),
+    title: titleInput.value,
+    village: getVillageValue(),
+    commune: getCommuneValue(),
+    wing: document.getElementById("f_wing").value.trim(),
+    tele: foundPhone,
+    rc: document.getElementById("f_rc").value,
+    disabled: document.getElementById("f_disabled").value,
+    mvc: document.getElementById("f_mvc").value,
+    other: document.getElementById("f_other").value.trim(),
+    remark: document.getElementById("f_remark").value.trim(),
+    wingId: document.getElementById("f_wingId").value.trim(),
+    wingName: document.getElementById("f_wingName").value.trim(),
+    hasWing: document.getElementById("f_hasWing").value,
+    authName: document.getElementById("f_authName").value.trim(),
+    authWing: document.getElementById("f_authWing").value.trim(),
+    checkedInAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try{
+    // New partner? Save them into the shared partner list too, so they
+    // auto-fill next time at any activity.
+    if (!foundPartner){
+      const partnerRecord = {
+        name: record.name, sex: record.sex, age: record.age, role: record.role,
+        village: record.village, commune: record.commune, wing: record.wing,
+        tele: foundPhone, rc: record.rc, disabled: record.disabled, mvc: record.mvc,
+        other: record.other, remark: record.remark, wingId: record.wingId, wingName: record.wingName,
+        hasWing: record.hasWing, authName: record.authName, authWing: record.authWing
+      };
+      await db.collection("partners").doc(foundPhone).set(partnerRecord, { merge: true });
+    }
+
+    const eventRef = db.collection("events").doc(eventId);
+    const attRef = eventRef.collection("attendance").doc(foundPhone);
+    const assignedNo = await db.runTransaction(async (tx) => {
+      const evDoc = await tx.get(eventRef);
+      const nextNo = ((evDoc.data() && evDoc.data().attendanceCount) || 0) + 1;
+      tx.update(eventRef, { attendanceCount: nextNo });
+      tx.set(attRef, { ...record, no: nextNo });
+      return nextNo;
+    });
+    showSuccess(record.name, assignedNo);
+  }catch(err){
+    toast("Could not submit: " + err.message, "error");
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Confirm attendance";
+  }
+});
+
+function showSuccess(name, no){
+  document.getElementById("checkinCard").classList.add("hidden");
+  document.getElementById("successName").textContent = name;
+  document.getElementById("successNumber").textContent = "#" + no;
+  document.getElementById("successCard").classList.remove("hidden");
+}
+document.getElementById("checkinAnotherBtn").addEventListener("click", () => {
+  document.getElementById("successCard").classList.add("hidden");
+  document.getElementById("checkinCard").classList.remove("hidden");
+  document.getElementById("phoneInput").value = "";
+  document.getElementById("lookupMsg").innerHTML = "";
+  document.getElementById("detailsForm").classList.add("hidden");
+  document.getElementById("detailsForm").reset();
+  document.getElementById("submitBtn").disabled = false;
+  document.getElementById("submitBtn").textContent = "Confirm attendance";
+  document.getElementById("phoneInput").focus();
+});
+</script>
+</body>
+</html>
